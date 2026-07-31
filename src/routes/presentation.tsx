@@ -15,6 +15,7 @@ import {
   personLeadingTypes,
   useEvent,
 } from "@/lib/event-store";
+import { useShow } from "@/lib/show-engine";
 import { awards, buildProfile, contextualize, groupStory, movieCast, scenariosFor } from "@/lib/insights";
 
 

@@ -1,3 +1,4 @@
+import { useShow } from "@/lib/show-engine";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -45,10 +46,17 @@ export const Route = createFileRoute("/host")({
 
 function HostPanel() {
   const state = useEvent();
+  // Same central Show Engine state the presentation screen renders from.
+  const show = useShow();
   useHostShortcuts();
 
   return (
-    <div className="min-h-screen bg-[oklch(0.98_0_0)] text-[oklch(0.2_0.04_275)]">
+    <div
+      className="min-h-screen bg-[oklch(0.98_0_0)] text-[oklch(0.2_0.04_275)]"
+      data-scene={show.event.currentScene}
+      data-chapter={show.event.currentChapter.number}
+      data-progress={show.event.progress.toFixed(2)}
+    >
       <header className="sticky top-0 z-10 border-b border-black/5 bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">

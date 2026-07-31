@@ -12,7 +12,6 @@ import {
   initialShowAuthoredState,
   makeMemoryEntry,
   normalizeAuthored,
-  type AIMemory,
   type MemoryEntry,
   type ParticipantAnswer,
   type PersonalityHypothesis,
@@ -246,7 +245,35 @@ export const useEvent = create<EventState & Actions>((set, get) => {
         }
         next[id] = p;
       });
-      commit({ people: next, screen: "winner" });
+      // Central show state: log each participant's answer for this question.
+      const show = get().show;
+      const answers = { ...show.answers };
+      (["red", "blue", "green"] as NomineeColor[]).forEach((c) => {
+        const n = nominees[c].trim();
+        if (!n) return;
+        const id = n.toLowerCase();
+        const prev = answers[id] ?? [];
+        if (prev.some((a) => a.questionIndex === currentIndex)) return;
+        answers[id] = [...prev, {
+          questionIndex: currentIndex,
+          questionText: q.text ?? "",
+          color: c,
+          role: c === winnerColor ? "winner" : "nominee",
+          at: Date.now(),
+        }];
+      });
+      const winnerName = nominees[winnerColor].trim();
+      const moments = winnerName
+        ? [...show.aiMemory.importantMoments, makeMemoryEntry(
+            `${winnerName} won “${q.text ?? `Question ${currentIndex + 1}`}”`,
+            { personId: winnerName.toLowerCase(), questionIndex: currentIndex, weight: 0.6 },
+          )]
+        : show.aiMemory.importantMoments;
+      commit({
+        people: next,
+        screen: "winner",
+        show: { ...show, answers, aiMemory: { ...show.aiMemory, importantMoments: moments } },
+      });
     },
     nextQuestion: () => {
       const { currentIndex, questions } = get();

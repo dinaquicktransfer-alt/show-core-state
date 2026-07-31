@@ -267,7 +267,25 @@ export function deriveShowState(src: ShowSourceRecord): ShowState {
       },
       currentVisualTheme: src.show.presentation.currentVisualTheme,
     },
-    aiMemory: src.show.aiMemory,
+    aiMemory: {
+      ...src.show.aiMemory,
+      // Fill in evidence-based hypotheses for anyone the AI hasn't authored yet.
+      personalityHypotheses: participants.reduce<Record<string, PersonalityHypothesis[]>>(
+        (acc, p) => {
+          if (acc[p.id]?.length) return acc;
+          const prof = p.profile;
+          if (!prof) return acc;
+          acc[p.id] = prof.topTypes.map((t) => ({
+            type: t,
+            confidence: Math.max(0, Math.min(1, prof.spectrum[t] * prof.confidence)),
+            rationale: `Evidence from ${p.nominations} nomination(s) and ${p.wins} win(s).`,
+            at: 0,
+          }));
+          return acc;
+        },
+        { ...src.show.aiMemory.personalityHypotheses },
+      ),
+    },
   };
 }
 

@@ -8,6 +8,16 @@ import {
   type Person,
   type QuestionItem,
 } from "./enneagram";
+import {
+  initialShowAuthoredState,
+  makeMemoryEntry,
+  normalizeAuthored,
+  type AIMemory,
+  type MemoryEntry,
+  type ParticipantAnswer,
+  type PersonalityHypothesis,
+  type ShowAuthoredState,
+} from "./show-state";
 
 export type Screen =
   | "welcome"
@@ -59,6 +69,8 @@ export interface EventState {
   participants: Participant[];
   audienceType: string;
   preparedAt: number | null;
+  // Show Engine — authored slice of the single central show state.
+  show: ShowAuthoredState;
   updatedAt: number;
 }
 
@@ -81,6 +93,7 @@ const initial: EventState = {
   participants: [],
   audienceType: "",
   preparedAt: null,
+  show: initialShowAuthoredState,
   updatedAt: Date.now(),
 };
 
@@ -93,7 +106,8 @@ function loadInitial(): EventState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return initial;
-    return { ...initial, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    return { ...initial, ...parsed, show: normalizeAuthored(parsed?.show) };
   } catch {
     return initial;
   }
@@ -139,6 +153,21 @@ interface Actions {
   markPrepared: () => void;
   pickNominee: (color: NomineeColor, name: string) => void;
   _hydrateFromRemote: (s: EventState) => void;
+  // ---- Show Engine actions (single central state) ----
+  patchShow: (patch: Partial<ShowAuthoredState>) => void;
+  setEventName: (v: string) => void;
+  setShowTheme: (v: string) => void;
+  setPresentation: (patch: Partial<ShowAuthoredState["presentation"]>) => void;
+  recordAnswer: (personId: string, answer: ParticipantAnswer) => void;
+  addObservation: (personId: string, text: string) => void;
+  addDetectedPattern: (personId: string, text: string) => void;
+  rememberDiscovery: (text: string, extra?: Partial<MemoryEntry>) => void;
+  rememberMoment: (text: string, extra?: Partial<MemoryEntry>) => void;
+  addUnresolvedQuestion: (text: string, extra?: Partial<MemoryEntry>) => void;
+  resolveQuestion: (id: string) => void;
+  addGroupPattern: (text: string, extra?: Partial<MemoryEntry>) => void;
+  setHypotheses: (personId: string, hyps: PersonalityHypothesis[]) => void;
+  clearMemory: () => void;
 }
 
 
@@ -266,6 +295,61 @@ export const useEvent = create<EventState & Actions>((set, get) => {
     setParticipants: (list) => commit({ participants: list }),
     setAudienceType: (v) => commit({ audienceType: v }),
     markPrepared: () => commit({ preparedAt: Date.now() }),
+    // ---------------- Show Engine actions ----------------
+    patchShow: (patch) => commit({ show: { ...get().show, ...patch } }),
+    setEventName: (v) => commit({ show: { ...get().show, eventName: v } }),
+    setShowTheme: (v) => commit({ show: { ...get().show, showTheme: v } }),
+    setPresentation: (patch) =>
+      commit({
+        show: {
+          ...get().show,
+          presentation: { ...get().show.presentation, ...patch },
+        },
+      }),
+    recordAnswer: (personId, answer) => {
+      const show = get().show;
+      const prev = show.answers[personId] ?? [];
+      if (prev.some((a) => a.questionIndex === answer.questionIndex)) return;
+      commit({ show: { ...show, answers: { ...show.answers, [personId]: [...prev, answer] } } });
+    },
+    addObservation: (personId, text) => {
+      const show = get().show;
+      const prev = show.observations[personId] ?? [];
+      if (!text.trim() || prev.includes(text)) return;
+      commit({ show: { ...show, observations: { ...show.observations, [personId]: [...prev, text] } } });
+    },
+    addDetectedPattern: (personId, text) => {
+      const show = get().show;
+      const prev = show.patterns[personId] ?? [];
+      if (!text.trim() || prev.includes(text)) return;
+      commit({ show: { ...show, patterns: { ...show.patterns, [personId]: [...prev, text] } } });
+    },
+    rememberDiscovery: (text, extra) => {
+      const show = get().show;
+      commit({ show: { ...show, aiMemory: { ...show.aiMemory, discoveries: [...show.aiMemory.discoveries, makeMemoryEntry(text, extra)] } } });
+    },
+    rememberMoment: (text, extra) => {
+      const show = get().show;
+      commit({ show: { ...show, aiMemory: { ...show.aiMemory, importantMoments: [...show.aiMemory.importantMoments, makeMemoryEntry(text, extra)] } } });
+    },
+    addUnresolvedQuestion: (text, extra) => {
+      const show = get().show;
+      commit({ show: { ...show, aiMemory: { ...show.aiMemory, unresolvedQuestions: [...show.aiMemory.unresolvedQuestions, makeMemoryEntry(text, extra)] } } });
+    },
+    resolveQuestion: (id) => {
+      const show = get().show;
+      commit({ show: { ...show, aiMemory: { ...show.aiMemory, unresolvedQuestions: show.aiMemory.unresolvedQuestions.filter((q) => q.id !== id) } } });
+    },
+    addGroupPattern: (text, extra) => {
+      const show = get().show;
+      if (show.aiMemory.groupPatterns.some((g) => g.text === text)) return;
+      commit({ show: { ...show, aiMemory: { ...show.aiMemory, groupPatterns: [...show.aiMemory.groupPatterns, makeMemoryEntry(text, extra)] } } });
+    },
+    setHypotheses: (personId, hyps) => {
+      const show = get().show;
+      commit({ show: { ...show, aiMemory: { ...show.aiMemory, personalityHypotheses: { ...show.aiMemory.personalityHypotheses, [personId]: hyps } } } });
+    },
+    clearMemory: () => commit({ show: { ...get().show, aiMemory: normalizeAuthored({}).aiMemory } }),
     pickNominee: (color, name) =>
       commit({ nominees: { ...get().nominees, [color]: name } }),
   };
@@ -299,6 +383,7 @@ export function importBundle(raw: string): { ok: boolean; error?: string } {
       participants: Array.isArray(s.participants) ? s.participants as Participant[] : [],
       audienceType: typeof s.audienceType === "string" ? s.audienceType : "",
       preparedAt: typeof s.preparedAt === "number" ? s.preparedAt : null,
+      show: normalizeAuthored((s as { show?: unknown }).show),
       updatedAt: Date.now(),
     };
 
@@ -318,13 +403,13 @@ function stripActions(s: EventState & Partial<Actions>): EventState {
     screen, questions, currentIndex, nominees, winnerColor, people,
     selectedType, selectedPersonId, movieTheme, currentInsight,
     audienceContext, roomContext, comparePair, soundOn,
-    insightsShownAt, participants, audienceType, preparedAt, updatedAt,
+    insightsShownAt, participants, audienceType, preparedAt, show, updatedAt,
   } = s;
   return {
     screen, questions, currentIndex, nominees, winnerColor, people,
     selectedType, selectedPersonId, movieTheme, currentInsight,
     audienceContext, roomContext, comparePair, soundOn,
-    insightsShownAt, participants, audienceType, preparedAt, updatedAt,
+    insightsShownAt, participants, audienceType, preparedAt, show, updatedAt,
   };
 }
 

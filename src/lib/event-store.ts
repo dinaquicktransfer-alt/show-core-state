@@ -256,7 +256,7 @@ export const useEvent = create<EventState & Actions>((set, get) => {
         if (prev.some((a) => a.questionIndex === currentIndex)) return;
         answers[id] = [...prev, {
           questionIndex: currentIndex,
-          questionText: q.text ?? "",
+          questionText: q.question,
           color: c,
           role: c === winnerColor ? "winner" : "nominee",
           at: Date.now(),
@@ -265,7 +265,7 @@ export const useEvent = create<EventState & Actions>((set, get) => {
       const winnerName = nominees[winnerColor].trim();
       const moments = winnerName
         ? [...show.aiMemory.importantMoments, makeMemoryEntry(
-            `${winnerName} won “${q.text ?? `Question ${currentIndex + 1}`}”`,
+            `${winnerName} won “${q.question}”`,
             { personId: winnerName.toLowerCase(), questionIndex: currentIndex, weight: 0.6 },
           )]
         : show.aiMemory.importantMoments;

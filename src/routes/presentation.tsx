@@ -38,6 +38,8 @@ export const Route = createFileRoute("/presentation")({
 });
 
 function Presentation() {
+  // Single source of truth: the central Show Engine state.
+  const show = useShow();
   const screen = useEvent((s) => s.screen);
   const currentIndex = useEvent((s) => s.currentIndex);
   const insightsShownAt = useEvent((s) => s.insightsShownAt);
@@ -89,7 +91,16 @@ function Presentation() {
     }
   }, [screen, currentIndex, insightsShownAt, showQuestion, showResults, showInsight, markInsightShown]);
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[oklch(0.09_0.05_265)] text-white">
+    <div
+      className="relative min-h-screen overflow-hidden bg-[oklch(0.09_0.05_265)] text-white"
+      data-scene={show.event.currentScene}
+      data-chapter={show.event.currentChapter.number}
+      data-reveal={show.presentation.currentReveal}
+      data-animation={show.presentation.currentAnimation}
+      data-visual-theme={show.presentation.currentVisualTheme}
+      data-atmosphere={show.presentation.currentAtmosphere.mood}
+      data-progress={show.event.progress.toFixed(2)}
+    >
       <BackgroundFX />
       <div className="relative flex min-h-screen items-center justify-center p-8">
 
